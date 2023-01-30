@@ -38,8 +38,9 @@ class DeepNNEvaluator(Evaluator):
     def __init__(self,nnet:NNBase) -> None:
         super().__init__()
         self.nnet = nnet
-        self.nnet.eval()
         self.device = get_device()
+        # self.nnet.eval()
+        # self.nnet.to(self.device)
     
     def evaluate(self, state: State) -> tuple[np.ndarray, np.ndarray]:
         assert not state.is_terminal()
@@ -203,7 +204,7 @@ class AMCTS(MCTSBase):
         qsa_ar = wsa_ar/(nsa_ar+EPS)
         u_ar:np.ndarray = qsa_ar + self._cpuct * psa_ar * math.sqrt(ns) / (1+nsa_ar)
         u_ar -= (actions_legality == 0)*-1000000
-        action = int(u_ar.argmax())
+        action = int(u_ar.argmax(axis=None))
         return action
 
     def _backprop(self,visited_path:list[tuple[tuple,int,int]],last_score:float,last_player:int):
@@ -255,7 +256,7 @@ class AMCTS(MCTSBase):
     def _roll(self):
         if len(self._rollouts) == 0:
             return
-        self._nnet.eval()
+        # self._nnet.eval()
         states :list[State] = [
             tup[0] for tup in self._rollouts
         ]

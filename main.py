@@ -39,10 +39,11 @@ def train_justconnect4():
         n_testing_episodes=20,
         network=network,
         use_async_mcts=True,
+        use_mp=True,
         test_game_fn=game_fn
     )
     for nn in trainer.train():
-        path = os.path.join("tmp", "justconnect4_async.pt")
+        path = os.path.join("tmp", "justconnect4_async_mp.pt")
         nn.save_model(path)
 
 def train_othello():
@@ -99,8 +100,8 @@ def train_english_draughts():
         path = os.path.join("tmp", "english_draught_alpha_zero.pt")
         nn.save_model(path)
 def main():
-    # train_justconnect4()
-    train_english_draughts()
+    train_justconnect4()
+    # train_english_draughts()
     # train_othello()
 
     

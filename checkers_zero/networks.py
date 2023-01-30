@@ -26,6 +26,9 @@ class NNBase(nn.Module,ABC):
         except:
             print(f"Could not load nn from {path}")
 
+    def clone(self)->'NNBase':
+        raise NotImplementedError()
+
 
 class SharedResNetwork(NNBase):
     def __init__(self,
@@ -36,6 +39,11 @@ class SharedResNetwork(NNBase):
                  n_blocks=5):
 
         super().__init__()
+        self.shape = shape
+        self.n_actions = n_actions
+        self.filters = filters
+        self.fc_dims = fc_dims
+        self.n_blocks = n_blocks
 
         self._blocks = nn.ModuleList(
             [ResBlock(filters) for _ in range(n_blocks)])
@@ -71,6 +79,15 @@ class SharedResNetwork(NNBase):
         probs: T.Tensor = pi.softmax(dim=-1)
         wdl_probs = wdl_nums.softmax(dim=-1)
         return probs, wdl_probs
+
+    def clone(self) -> 'NNBase':
+        cloned = SharedResNetwork(shape=self.shape,
+            n_actions=self.n_actions,
+            filters=self.filters,
+            fc_dims =self.fc_dims,
+            n_blocks=self.n_blocks)
+        cloned.load_state_dict(self.state_dict())
+        return cloned
 
 class ResBlock(nn.Module):
     def __init__(self, channels):

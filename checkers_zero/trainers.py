@@ -37,9 +37,6 @@ def assign_rewards(examples:list[tuple[State,np.ndarray,np.ndarray|None,int]],re
 def execute_episode(game_fn:Callable[[],Environment],n_sims:int,network:NNBase,use_amcts:bool):
     examples :list[tuple[State,np.ndarray,np.ndarray|None,int]] = []
     results:list[tuple[State,np.ndarray,np.ndarray]] = []
-    network.to(get_device())
-    network.eval()
-    
     game = game_fn()
     temperature = 1.0
     cpuct = 2.0
@@ -62,15 +59,17 @@ def execute_episode(game_fn:Callable[[],Environment],n_sims:int,network:NNBase,u
             break
     return results
 
-def execute_episode_process(args):
-    return execute_episode(*args)
+def execute_episode_process(args:tuple[Callable[[],Environment],int,NNBase,bool]):
+    game_fn,n_sims,network,use_mcts = args
+    network = network.to(get_device())
+    return execute_episode(game_fn,n_sims,network,use_mcts)
 
 def execute_match(game_fn:Callable[[],Environment],network_1:NNBase,network_2:NNBase,n_sims:int,n_sets:int,use_amcts:bool):
-    device = get_device()
-    network_1.to(device=device)
-    network_2.to(device=device)
-    network_1.eval()
-    network_2.eval()
+    # device = get_device()
+    # network_1.to(device=device)
+    # network_2.to(device=device)
+    # network_1.eval()
+    # network_2.eval()
     n_game_actions = game_fn().n_actions
     temperature = 0.5
     cpuct = 1
@@ -83,8 +82,11 @@ def execute_match(game_fn:Callable[[],Environment],network_1:NNBase,network_2:NN
     wdl = match_.start()
     return wdl
 
-def execute_match_process(args):
-    return execute_match(*args)
+def execute_match_process(args:tuple[Callable[[],Environment],NNBase,NNBase,int,int,bool]):
+    game_fn,network_1,network_2,n_sims,n_sets,use_amcts = args
+    network_1 = network_1.to(get_device())
+    network_2 = network_2.to(get_device())
+    return execute_match(game_fn,network_1,network_2,n_sims,n_sets,use_amcts)
 
 class AlphaZeroTrainer(TrainerBase):
     def __init__(self,game_fn:Callable[[],Environment],
@@ -99,6 +101,7 @@ class AlphaZeroTrainer(TrainerBase):
             n_testing_episodes:int,
             network:NNBase,
             use_async_mcts=True,
+            use_mp = False,
             checkpoint:str|None=None) -> None:
         super().__init__()
         self._game_fn = game_fn
@@ -112,6 +115,7 @@ class AlphaZeroTrainer(TrainerBase):
         self._n_batches = n_batches
         self._n_testing_episodes = n_testing_episodes
         self._use_async_mcts = use_async_mcts
+        self._use_mp = use_mp
         self._checkpoint:str|None = checkpoint
         game = game_fn()
         self._n_game_actions = game.n_actions
@@ -127,20 +131,23 @@ class AlphaZeroTrainer(TrainerBase):
             print(f"Iteration {iteration+1} of {self._n_iterations}")
             n_workers = 8
             examples = []
-            # self.base_network.cpu()
-            # n_processes = 3
-            # with mp.Pool(processes=n_processes) as pool:
-            #     a = pool.map(execute_episode_process,tqdm(list(zip([self._game_fn for _ in range(self._n_episodes)],[self._n_sims for _ in range(self._n_episodes)],[self.base_network for _ in range(self._n_episodes)],[self._use_async_mcts for _ in range(self._n_episodes)]))))
-            #     examples+=[y for x in tqdm(a,desc="Collecting Data") for y in x]
-            # self.base_network.to(get_device())
-            with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
-                a = executor.map(execute_episode,
-                    [self._game_fn for _ in range(self._n_episodes)],
-                    [self._n_sims for _ in range(self._n_episodes)],
-                    [self.base_network for _ in range(self._n_episodes)],
-                    [self._use_async_mcts for _ in range(self._n_episodes)])
-                examples+=[y for x in tqdm(a,desc="Collecting Data") for y in x]
-
+            self.base_network.eval()
+            if self._use_mp:
+                network = self.base_network.cpu()
+                n_processes = 3
+                with mp.Pool(processes=n_processes) as pool:
+                    a = pool.map(execute_episode_process,tqdm(list(zip([self._game_fn for _ in range(self._n_episodes)],[self._n_sims for _ in range(self._n_episodes)],[network for _ in range(self._n_episodes)],[self._use_async_mcts for _ in range(self._n_episodes)]))))
+                    examples+=[y for x in tqdm(a,desc="Collecting Data") for y in x]
+                network = self.base_network.to(get_device())
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:
+                    a = executor.map(execute_episode,
+                        [self._game_fn for _ in range(self._n_episodes)],
+                        [self._n_sims for _ in range(self._n_episodes)],
+                        [self.base_network for _ in range(self._n_episodes)],
+                        [self._use_async_mcts for _ in range(self._n_episodes)])
+                    examples+=[y for x in tqdm(a,desc="Collecting Data") for y in x]
+            
             states,probs,wdl = list(zip(*examples))
             states = [ex[0] for ex in examples]
             probs = [ex[1] for ex in examples]
@@ -163,26 +170,29 @@ class AlphaZeroTrainer(TrainerBase):
                 n_processes = 3
                 # n_sets_per_process = int(self._n_testing_episodes // n_processes)
                 wdl = np.zeros((3,))
-                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exec:
-                    a = exec.map(execute_match,
-                        [self._test_game_fn for _ in range(self._n_testing_episodes//2)],
-                        [self.base_network for _ in range(self._n_testing_episodes//2)],
-                        [strongest_network for _ in range(self._n_testing_episodes//2)],
-                        [self._n_sims for _ in range(self._n_testing_episodes//2)],
-                        [2 for _ in range(self._n_testing_episodes//2)],
-                        [self._use_async_mcts for _ in range(self._n_testing_episodes//2)])
-                    for res in a:
-                        wdl+=res
-                # with mp.Pool(processes=n_processes) as pool:
-                #     a = pool.map(execute_match_process,tqdm(list(zip([self._test_game_fn for _ in range(n_processes)],[self.base_network for _ in range(n_processes)],[strongest_network for _ in range(n_processes)],[self._n_sims for _ in range(n_processes)],[n_sets_per_process for _ in range(n_processes)],[self._use_async_mcts for _ in range(n_processes)]))))
-                #     for res in a:
-                #         wdl += res
-                    
+                if self._use_mp:
+                    network = self.base_network.cpu()
+                    strongest = strongest_network.cpu()
+                    with mp.Pool(n_processes) as pool:
+                        a = pool.map(execute_match_process,[(self._test_game_fn,network,strongest,self._n_sims,2,self._use_async_mcts) for _ in range(self._n_testing_episodes//2)])
+                        for res in a:
+                            wdl+=res
+                    self.base_network= self.base_network.to(get_device())
+                    strongest_network = strongest_network.to(get_device())
+                else:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exec:
+                        a = exec.map(execute_match,
+                            [self._test_game_fn for _ in range(self._n_testing_episodes//2)],
+                            [self.base_network for _ in range(self._n_testing_episodes//2)],
+                            [strongest_network for _ in range(self._n_testing_episodes//2)],
+                            [self._n_sims for _ in range(self._n_testing_episodes//2)],
+                            [2 for _ in range(self._n_testing_episodes//2)],
+                            [self._use_async_mcts for _ in range(self._n_testing_episodes//2)])
+                        for res in a:
+                            wdl+=res
                 print("Evaluation Phase")
-
                 score_ratio = (wdl[0]*2 + wdl[1]) / (wdl.sum()*2)
                 print(f"wins : {wdl[0]} , draws:{wdl[1]} , losses:{wdl[2]}")
-
                 print(
                     f"score ratio against old strongest opponent: {score_ratio*100:0.2f}%")
                 if wdl[0] > wdl[2]:
