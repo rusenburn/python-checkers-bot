@@ -37,20 +37,21 @@ class Match():
     def _play_set_2(self)->np.ndarray:
         players = [self.player_1,self.player_2]
         state = self.game.reset()
-        while not state.is_terminal():
+        done = False
+        while not done:
             if self.render:
-                state.render()
+                self.game.render()
             current_player = state.player_turn()
             player = players[current_player]
             action = player.choose_action(state)
-            state = state.step(action)
+            state,done = self.game.step(action)
         
         wdl = state.game_result()
         player = state.player_turn()
         if player != 0:
             wdl = wdl[::-1]
         if self.render:
-            state.render()
+            self.game.render()
         return wdl.copy()
         
             

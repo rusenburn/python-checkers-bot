@@ -79,29 +79,31 @@ def train_english_draughts():
     game = game_fn()
     network = SharedResNetwork(
         game.observation_space, game.n_actions, n_blocks=5,filters=128)
-    # path = os.path.join("tmp","english_draught_alpha_zero.pt")
-    # network.load_model(path)
+    
+    path = os.path.join("tmp","english_draught_alpha_zero_20.pt")
+    network.load_model(path)
     network.to(device=device)
     trainer = AlphaZeroTrainer(
         game_fn=game_fn,
         n_iterations=20,
         n_episodes=128,
-        n_sims=50,
+        n_sims=100,
         n_epochs=4,
         n_batches=8,
         lr=2.5e-4,
         actor_critic_ratio=0.5,
         n_testing_episodes=20,
         network=network,
-        use_async_mcts=False,
+        use_async_mcts=True,
+        use_mp=True,
         test_game_fn=test_game_fn
     )
     for nn in trainer.train():
         path = os.path.join("tmp", "english_draught_alpha_zero.pt")
         nn.save_model(path)
 def main():
-    train_justconnect4()
-    # train_english_draughts()
+    # train_justconnect4()
+    train_english_draughts()
     # train_othello()
 
     
