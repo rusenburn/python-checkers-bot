@@ -37,7 +37,7 @@ class EnglishDraughtsState(State):
 
     def get_actions_legality(self) -> np.ndarray:
         if self._cached_actions_legality is not None:
-            self._cached_actions_legality.copy()
+            return self._cached_actions_legality.copy()
         if self.last_jump_legal_actions is not None:
             assert self.last_jump is not None
             self._cached_actions_legality = self.last_jump_legal_actions
@@ -63,7 +63,7 @@ class EnglishDraughtsState(State):
 
     def is_terminal(self) -> bool:
         if self._cached_is_terminal is not None:
-            self._cached_is_terminal
+            return self._cached_is_terminal
         if self._is_opponent_win():
             self._cached_is_terminal = True
             return self._cached_is_terminal
@@ -77,7 +77,7 @@ class EnglishDraughtsState(State):
     def game_result(self) -> np.ndarray:
         assert self.is_terminal()
         if self._cached_game_result is not None:
-            return self._cached_game_result
+            return self._cached_game_result.copy()
         wdl = np.zeros((3,), dtype=np.int32)
         if self._is_opponent_win():
             wdl[2] = 1

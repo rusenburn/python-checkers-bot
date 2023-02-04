@@ -1,31 +1,32 @@
 import numpy as np
 from checkers_zero.environment import Environment
-from .state import EnglishDraughtsState
-from typing import Any
-class EnglishDraughtsEnv(Environment):
+from .state import TurkishDraughtsState,N_ACTIONS
+
+
+class TurkishDraughtsEnv(Environment):
     def __init__(self,all_kings_mode=False) -> None:
         super().__init__()
-        self._state = self._initialize_new_state(all_kings_mode)
-        self._all_kings = all_kings_mode
-        self.main_window = None # type: ignore
-
+        self._state = TurkishDraughtsState.initialize_new_state(all_kings_mode)
+        self._all_kings_mode = all_kings_mode
+        self.main_window = None
+    
     @property
     def n_actions(self) -> int:
-        return EnglishDraughtsState.N_ACTIONS
-
+        return N_ACTIONS
+    
     @property
     def observation_space(self) -> tuple:
         return self._state.observation_space
-
-    def reset(self) -> EnglishDraughtsState:
-        self._state = self._initialize_new_state(self._all_kings)
+    
+    def reset(self) -> 'TurkishDraughtsState':
+        self._state = TurkishDraughtsState.initialize_new_state(self._all_kings_mode)
         return self._state
-
-    def step(self, action: int) -> tuple[EnglishDraughtsState, bool]:
+    
+    def step(self, action: int) -> tuple[TurkishDraughtsState, bool]:
         self._state = self._state.step(action)
         terminal = self._state.is_terminal()
-        return self._state, terminal
-
+        return self._state,terminal
+    
     def render(self) -> None:
         import pygame
         from checkers_zero.constants import WHITE_COLOR,RED_COLOR,BLUE_COLOR,BLACK_COLOR,GRAY_COLOR
@@ -46,10 +47,9 @@ class EnglishDraughtsEnv(Environment):
         self._clock.tick(50)
 
         pygame.display.update()
-
-    def player_turn(self) -> int:
+    
+    def player_turn(self)->int:
         return self._state.player_turn()
-
     
     def _draw_board(self):
         import pygame
@@ -65,9 +65,6 @@ class EnglishDraughtsEnv(Environment):
         obs = self._state.to_obs()
         players_colors = [BLUE_COLOR,BLACK_COLOR]
         player = self._state.player_turn()
-        if player !=0:
-            obs = obs[:,::-1,::-1]
-            ...
         for row in range(8):
             top_offset = row*self.cell_size
             for col in range(8):
@@ -106,25 +103,6 @@ class EnglishDraughtsEnv(Environment):
                     pygame.draw.circle(self.game_surface, player_color, (
                         left_offset+self.cell_size//2, top_offset+self.cell_size//2), self.cell_size*3//10)
                     self.game_surface.blit(self._crown,(center[0]-self._crown.get_width()//2,center[1]-self._crown.get_height()//2))
+    
+    
 
-    def _initialize_new_state(self,all_kings:bool) -> EnglishDraughtsState:
-        observation = np.array([
-            [0, -1, 0, -1, 0, -1, 0, -1],
-            [-1, 0, -1, 0, -1, 0, -1, 0],
-            [0, -1, 0, -1, 0, -1, 0, -1],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0]
-        ], dtype=np.int32)
-        if all_kings:
-            observation = observation*2
-        obs_ar = np.zeros((4, EnglishDraughtsState.ROWS,
-                          EnglishDraughtsState.COLS), dtype=np.int32)
-        obs_ar[0, :, :] = observation == 1
-        obs_ar[1, :, :] = observation == 2
-        obs_ar[2, :, :] = observation == -1
-        obs_ar[3, :, :] = observation == -2
-        state = EnglishDraughtsState(obs_ar, 0, dict(), None, None, 0)
-        return state

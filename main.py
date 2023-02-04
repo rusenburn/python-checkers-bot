@@ -8,6 +8,8 @@ from checkers_zero.just_connect4.game import JustConnect4Game
 import os
 import random
 
+from checkers_zero.turkish_draughts.game import TurkishDraughtsEnv
+
 
 def game_fn():
     return EnglishDraughtsEnv() if random.random() < 0.5 else EnglishDraughtsEnv(all_kings_mode=True)
@@ -19,7 +21,8 @@ def othello_game_fn():
 
 def justconnect4_game_fn():
     return JustConnect4Game()
-
+def dama_game_fn():
+    return TurkishDraughtsEnv()
 def train_justconnect4():
     device = get_device()
     game_fn = justconnect4_game_fn
@@ -80,7 +83,7 @@ def train_english_draughts():
     network = SharedResNetwork(
         game.observation_space, game.n_actions, n_blocks=5,filters=128)
     
-    path = os.path.join("tmp","english_draught_alpha_zero_20.pt")
+    path = os.path.join("tmp","english_draught_alpha_zero.pt")
     network.load_model(path)
     network.to(device=device)
     trainer = AlphaZeroTrainer(
@@ -101,10 +104,40 @@ def train_english_draughts():
     for nn in trainer.train():
         path = os.path.join("tmp", "english_draught_alpha_zero.pt")
         nn.save_model(path)
+
+def train_dama():
+    T.set_num_threads(8)
+    device = get_device()
+    
+    game = dama_game_fn()
+    network = SharedResNetwork(
+        game.observation_space, game.n_actions, n_blocks=5,filters=128)
+    # path = os.path.join("tmp","dama_alpha_zero.pt")
+    # network.load_model(path)
+    network.to(device=device)
+    trainer = AlphaZeroTrainer(
+        game_fn=dama_game_fn,
+        n_iterations=20,
+        n_episodes=128,
+        n_sims=100,
+        n_epochs=4,
+        n_batches=8,
+        lr=2.5e-4,
+        actor_critic_ratio=0.5,
+        n_testing_episodes=20,
+        network=network,
+        use_async_mcts=True,
+        use_mp=True,
+        test_game_fn=dama_game_fn
+    )
+    for nn in trainer.train():
+        path = os.path.join("tmp", "dama_alpha_zero.pt")
+        nn.save_model(path)
 def main():
     # train_justconnect4()
-    train_english_draughts()
+    # train_english_draughts()
     # train_othello()
+    train_dama()
 
     
 
